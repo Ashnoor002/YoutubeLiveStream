@@ -1,9 +1,10 @@
 import dropbox
 import os
 import time
-from google.auth.transport.requests import Request
+import google.auth
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.oauth2.credentials import Credentials
 from flask import Flask
 
@@ -21,31 +22,17 @@ def authenticate_youtube():
     SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
 
     creds = None
-
-    # If there is no valid refresh token, start OAuth flow
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_config(
-                {
-                    "installed": {
-                        "client_id": CLIENT_ID,
-                        "client_secret": CLIENT_SECRET,
-                        "redirect_uris": ["http://localhost:5000"]
-                    }
-                },
-                SCOPES
-            )
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'client_secret.json', SCOPES)  # Make sure the file is placed here
             creds = flow.run_local_server(port=0)
-
-        # Save credentials for the next run
         with open('token.json', 'w') as token:
             token.write(creds.to_json())
-
     youtube = build('youtube', 'v3', credentials=creds)
     return youtube
 
@@ -88,7 +75,7 @@ def upload_video_to_youtube(youtube, video_file_path):
 
 # Download Video from Dropbox and Play on YouTube
 def play_video_from_dropbox(dbx, youtube):
-    folder_path = '/Apps/Youtube_live_streaming'
+    folder_path = '/Apps/Youtube_live_streaming'  # Adjust this to match your folder structure
     video_files = dbx.files_list_folder(folder_path).entries
 
     for video_file in video_files:
@@ -100,10 +87,6 @@ def play_video_from_dropbox(dbx, youtube):
         time.sleep(10)  # Delay between videos
 
 def download_video(dbx, video_file_path):
-    # Create a directory for downloading videos if it doesn't exist
-    if not os.path.exists("downloads"):
-        os.makedirs("downloads")
-
     with open(f"downloads/{video_file_path}", "wb") as f:
         metadata, res = dbx.files_download(path=video_file_path)
         f.write(res.content)
